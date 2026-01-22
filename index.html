@@ -23,6 +23,22 @@
                     <button id="new-trip-btn" class="btn-secondary">新建台账</button>
                     <button id="delete-trip-btn" class="btn-danger">删除台账</button>
                 </div>
+                <!-- 新建台账表单 -->
+                <div id="new-trip-form" class="hidden">
+                    <input type="text" id="trip-name-input" placeholder="请输入旅行名称">
+                    <button id="confirm-trip-btn" class="btn-secondary">确认</button>
+                    <button id="cancel-trip-btn" class="btn-danger">取消</button>
+                </div>
+            </div>
+            
+            <!-- 参与者管理 -->
+            <div class="participants-management">
+                <h3>参与者管理</h3>
+                <div class="participants-controls">
+                    <input type="text" id="participant-name-input" placeholder="请输入参与者姓名">
+                    <button id="add-participant-btn" class="btn-secondary">添加参与者</button>
+                </div>
+                <div id="participants-list" class="participants-list"></div>
             </div>
             <nav>
                 <ul>
@@ -61,11 +77,17 @@
                     </div>
                     <div class="form-group">
                         <label for="payer">支出人</label>
-                        <input type="text" id="payer" placeholder="例如：张三" required>
+                        <select id="payer" required>
+                            <option value="">请选择支出人</option>
+                            <!-- 参与者选项将通过JavaScript动态添加 -->
+                        </select>
                     </div>
                     <div class="form-group">
-                        <label for="participants">参与人 (用逗号分隔)</label>
-                        <input type="text" id="participants" placeholder="例如：张三,李四,王五" required>
+                        <label for="participants">参与人</label>
+                        <div class="participants-checkboxes" id="participants-checkboxes">
+                            <!-- 参与者复选框将通过JavaScript动态添加 -->
+                        </div>
+                        <input type="hidden" id="participants" required>
                     </div>
                     <div class="form-group">
                         <label for="category">分类</label>

@@ -13,6 +13,7 @@ let currentUser = null;
 let currentTrip = null;
 let trips = [];
 let expenses = [];
+let participants = [];
 let db = null;
 let auth = null;
 
@@ -29,7 +30,14 @@ window.addEventListener('DOMContentLoaded', function() {
     try {
         console.log('初始化Firebase...');
         firebase.initializeApp(firebaseConfig);
+        
+        // 配置Firestore，禁用持久化和优化连接
         db = firebase.firestore();
+        db.settings({
+            persistence: false, // 禁用持久化
+            ignoreUndefinedProperties: true // 忽略undefined属性
+        });
+        
         auth = firebase.auth();
         console.log('Firebase初始化成功！');
         
@@ -58,6 +66,9 @@ window.addEventListener('DOMContentLoaded', function() {
                 
                 // 初始化旅行台账管理
                 initTripManagement();
+                
+                // 初始化参与者管理
+                initParticipantsManagement();
             })
             .catch((error) => {
                 console.error('Firestore连接测试失败:', error);
@@ -202,13 +213,34 @@ function initTripManagement() {
     const tripSelect = document.getElementById('trip-select');
     const newTripBtn = document.getElementById('new-trip-btn');
     const deleteTripBtn = document.getElementById('delete-trip-btn');
+    const newTripForm = document.getElementById('new-trip-form');
+    const tripNameInput = document.getElementById('trip-name-input');
+    const confirmTripBtn = document.getElementById('confirm-trip-btn');
+    const cancelTripBtn = document.getElementById('cancel-trip-btn');
     
-    // 新建台账
+    // 新建台账 - 显示表单
     newTripBtn.addEventListener('click', function() {
-        const tripName = prompt('请输入旅行名称：');
+        newTripForm.classList.remove('hidden');
+        tripNameInput.focus();
+    });
+    
+    // 确认新建台账
+    confirmTripBtn.addEventListener('click', function() {
+        const tripName = tripNameInput.value;
         if (tripName && tripName.trim()) {
             createTrip(tripName.trim());
+            // 清空输入并隐藏表单
+            tripNameInput.value = '';
+            newTripForm.classList.add('hidden');
+        } else {
+            showMessage('请输入旅行名称', 'error');
         }
+    });
+    
+    // 取消新建台账
+    cancelTripBtn.addEventListener('click', function() {
+        tripNameInput.value = '';
+        newTripForm.classList.add('hidden');
     });
     
     // 删除台账
@@ -218,7 +250,13 @@ function initTripManagement() {
             return;
         }
         
-        if (confirm(`确定要删除旅行台账「${currentTrip.name}」吗？此操作不可恢复！`)) {
+        // 使用自定义确认对话框
+        if (window.confirm && typeof window.confirm === 'function') {
+            if (confirm(`确定要删除旅行台账「${currentTrip.name}」吗？此操作不可恢复！`)) {
+                deleteTrip(currentTrip.id);
+            }
+        } else {
+            // 如果confirm不可用，直接执行删除
             deleteTrip(currentTrip.id);
         }
     });
@@ -246,7 +284,6 @@ function initTripManagement() {
 function loadTrips() {
     console.log('加载旅行台账列表...');
     db.collection('trips')
-        .orderBy('createdAt', 'desc')
         .get()
         .then((querySnapshot) => {
             trips = [];
@@ -255,6 +292,12 @@ function loadTrips() {
                     id: doc.id,
                     ...doc.data()
                 });
+            });
+            // 在客户端按创建时间排序
+            trips.sort((a, b) => {
+                const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
+                const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
+                return dateB - dateA; // 降序排序
             });
             console.log('旅行台账加载成功，共', trips.length, '个台账');
             updateTripSelect();
@@ -350,7 +393,6 @@ function loadExpenses(tripId) {
     console.log('加载支出记录，tripId:', tripId);
     db.collection('expenses')
         .where('tripId', '==', tripId)
-        .orderBy('createdAt', 'desc')
         .get()
         .then((querySnapshot) => {
             expenses = [];
@@ -359,6 +401,12 @@ function loadExpenses(tripId) {
                     id: doc.id,
                     ...doc.data()
                 });
+            });
+            // 在客户端按创建时间排序
+            expenses.sort((a, b) => {
+                const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
+                const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
+                return dateB - dateA; // 降序排序
             });
             console.log('支出记录加载成功，共', expenses.length, '条记录');
             updateRecordsList();
@@ -409,8 +457,30 @@ function updateRecordsList() {
             <p><strong>支出人：</strong>${expense.payer}</p>
             <p><strong>参与人：</strong>${expense.participants.join('、')}</p>
             ${expense.notes ? `<p><strong>备注：</strong>${expense.notes}</p>` : ''}
+            <div class="record-actions">
+                <button class="delete-record-btn" data-id="${expense.id}">删除</button>
+            </div>
         </div>
     `).join('');
+    
+    // 添加删除按钮事件监听
+    console.log('添加删除按钮事件监听...');
+    const deleteButtons = document.querySelectorAll('.delete-record-btn');
+    console.log('找到删除按钮数量:', deleteButtons.length);
+    deleteButtons.forEach(btn => {
+        console.log('为删除按钮添加事件监听，data-id:', btn.dataset.id);
+        btn.addEventListener('click', function() {
+            console.log('删除按钮被点击，data-id:', this.dataset.id);
+            const expenseId = this.dataset.id;
+            console.log('确认删除支出记录，ID:', expenseId);
+            if (confirm('确定要删除这条支出记录吗？此操作不可恢复！')) {
+                console.log('用户确认删除，调用deleteExpense函数');
+                deleteExpense(expenseId);
+            } else {
+                console.log('用户取消删除');
+            }
+        });
+    });
 }
 
 // 更新仪表盘
@@ -710,6 +780,181 @@ function setDefaultDateTime() {
     
     document.getElementById('date').value = dateStr;
     document.getElementById('time').value = timeStr;
+}
+
+// 初始化参与者管理
+function initParticipantsManagement() {
+    console.log('初始化参与者管理...');
+    const participantNameInput = document.getElementById('participant-name-input');
+    const addParticipantBtn = document.getElementById('add-participant-btn');
+    const participantsList = document.getElementById('participants-list');
+    const payerSelect = document.getElementById('payer');
+    const participantsCheckboxes = document.getElementById('participants-checkboxes');
+    const participantsHidden = document.getElementById('participants');
+    
+    // 加载参与者列表
+    loadParticipants();
+    
+    // 添加参与者
+    addParticipantBtn.addEventListener('click', function() {
+        const name = participantNameInput.value.trim();
+        if (name) {
+            if (!participants.includes(name)) {
+                participants.push(name);
+                saveParticipants();
+                updateParticipantsList();
+                updatePayerSelect();
+                updateParticipantsCheckboxes();
+                participantNameInput.value = '';
+                showMessage('参与者添加成功！', 'success');
+            } else {
+                showMessage('该参与者已存在', 'error');
+            }
+        } else {
+            showMessage('请输入参与者姓名', 'error');
+        }
+    });
+    
+    // 处理参与人复选框变化
+    participantsCheckboxes.addEventListener('change', function(e) {
+        if (e.target.type === 'checkbox') {
+            updateParticipantsHidden();
+        }
+    });
+}
+
+// 加载参与者列表
+function loadParticipants() {
+    const savedParticipants = localStorage.getItem('participants');
+    if (savedParticipants) {
+        participants = JSON.parse(savedParticipants);
+    }
+    updateParticipantsList();
+    updatePayerSelect();
+    updateParticipantsCheckboxes();
+}
+
+// 保存参与者列表
+function saveParticipants() {
+    localStorage.setItem('participants', JSON.stringify(participants));
+}
+
+// 更新参与者列表
+function updateParticipantsList() {
+    const participantsList = document.getElementById('participants-list');
+    participantsList.innerHTML = '';
+    
+    participants.forEach((participant, index) => {
+        const participantItem = document.createElement('div');
+        participantItem.className = 'participant-item';
+        participantItem.innerHTML = `
+            <span>${participant}</span>
+            <button class="remove-participant-btn" data-index="${index}">删除</button>
+        `;
+        participantsList.appendChild(participantItem);
+    });
+    
+    // 添加删除参与者事件
+    document.querySelectorAll('.remove-participant-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const index = parseInt(this.dataset.index);
+            participants.splice(index, 1);
+            saveParticipants();
+            updateParticipantsList();
+            updatePayerSelect();
+            updateParticipantsCheckboxes();
+            showMessage('参与者删除成功！', 'success');
+        });
+    });
+}
+
+// 更新支出人选择框
+function updatePayerSelect() {
+    const payerSelect = document.getElementById('payer');
+    payerSelect.innerHTML = '<option value="">请选择支出人</option>';
+    
+    participants.forEach(participant => {
+        const option = document.createElement('option');
+        option.value = participant;
+        option.textContent = participant;
+        payerSelect.appendChild(option);
+    });
+}
+
+// 更新参与人复选框
+function updateParticipantsCheckboxes() {
+    const participantsCheckboxes = document.getElementById('participants-checkboxes');
+    participantsCheckboxes.innerHTML = '';
+    
+    participants.forEach(participant => {
+        const checkboxItem = document.createElement('div');
+        checkboxItem.className = 'checkbox-item';
+        checkboxItem.innerHTML = `
+            <input type="checkbox" id="participant-${participant}" value="${participant}">
+            <label for="participant-${participant}">${participant}</label>
+        `;
+        participantsCheckboxes.appendChild(checkboxItem);
+    });
+}
+
+// 更新参与人隐藏字段
+function updateParticipantsHidden() {
+    const checkboxes = document.querySelectorAll('#participants-checkboxes input[type="checkbox"]');
+    const selectedParticipants = Array.from(checkboxes)
+        .filter(checkbox => checkbox.checked)
+        .map(checkbox => checkbox.value);
+    document.getElementById('participants').value = selectedParticipants.join(',');
+}
+
+// 删除支出记录
+function deleteExpense(expenseId) {
+    console.log('删除支出记录，ID:', expenseId);
+    
+    // 检查expenseId是否有效
+    if (!expenseId) {
+        console.error('删除支出记录失败：expenseId无效');
+        showMessage('删除支出记录失败：记录ID无效', 'error');
+        return;
+    }
+    
+    // 检查db是否初始化
+    if (!db) {
+        console.error('删除支出记录失败：Firebase未初始化');
+        showMessage('删除支出记录失败：Firebase未初始化', 'error');
+        return;
+    }
+    
+    try {
+        // 从Firebase中删除记录
+        console.log('开始从Firebase中删除记录...');
+        db.collection('expenses')
+            .doc(expenseId)
+            .delete()
+            .then(() => {
+                console.log('支出记录删除成功');
+                
+                // 从本地数组中移除记录
+                const initialLength = expenses.length;
+                expenses = expenses.filter(expense => expense.id !== expenseId);
+                console.log('从本地数组中移除记录，初始长度:', initialLength, '新长度:', expenses.length);
+                
+                // 更新UI
+                console.log('更新UI...');
+                updateRecordsList();
+                updateDashboard();
+                
+                // 显示成功消息
+                showMessage('支出记录删除成功！', 'success');
+            })
+            .catch((error) => {
+                console.error('删除支出记录失败:', error);
+                console.error('错误详情:', JSON.stringify(error));
+                showMessage('删除支出记录失败：' + error.message, 'error');
+            });
+    } catch (error) {
+        console.error('删除支出记录时发生异常:', error);
+        showMessage('删除支出记录时发生异常，请重试', 'error');
+    }
 }
 
 // 设置表单默认值
